@@ -2,13 +2,21 @@
 
 # Get Values from config file
 config_file="autoproxies.conf"
-saved_timestamp=$(grep '^last_commit=' "$config_file" | cut -d'=' -f2)
+
+if [[ -f "$config_file" ]]; then
+    source "$config_file"
+else
+    echo "Error: Configuration file not found."
+    exit 1
+fi
+
+##saved_timestamp=$(grep '^last_commit=' "$config_file" | cut -d'=' -f2)
 
 #echo "Saved timestamp: $saved_timestamp"
 
 # Define the proxies file
-
 PROXY_FILE=$(pwd)"/proxies_list.txt"
+chmod 600 "$PROXY_FILE"
 
 ###############################################################################
 ##  OPTIONS PART
@@ -25,6 +33,7 @@ function help() {
     echo "             1 = Only really fast proxies but limited number"
     echo "             2 = (Default) Between 1 and 3. Good balance between speed and randomness"
     echo "             3 = More proxies (and increase randomness) but maybe slower"
+    echo "             4 = Very more proxies but maybe slower"
 }
 
 # Initialize variables
@@ -44,8 +53,8 @@ while [[ $# -gt 0 ]]; do
     -m|--mode) 
         if [[ -n "$2" && "$2" != -* ]]; then
             mode="$2"
-            if [[ $mode -lt 1 || $mode -gt 3 ]]; then
-                echo "Error : mode must be between 1 and 3" >&2
+            if [[ $mode -lt 1 || $mode -gt 4 ]]; then
+                echo "Error : $1 must be between 1 and 4" >&2
                 exit 1
             fi
             shift
@@ -53,8 +62,7 @@ while [[ $# -gt 0 ]]; do
             echo "Error : $1 requires an argument" >&2
             exit 1
         fi;;
-    *) echo "Invalid option: $1"
-        help
+    *) echo $0: invalid option -- '$1' \n Try "$0 -h" or "$0 --help" for more information.
         exit 1 ;;
     esac
     shift
@@ -105,7 +113,7 @@ if ! $keep; then
         curl -s https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt >> $PROXY_FILE
 
         # Update the timestamp in the config file
-        sed -i "s/^last_commit=.*/last_commit=$last_commit_timestamp/" $config_file
+        sed -i "s/^saved_timestamp=.*/saved_timestamp=$last_commit_timestamp/" $config_file
     else
         NewProxies=false
     fi
@@ -141,19 +149,37 @@ if $NewProxies; then
     esac
 
     echo "Checking proxies are working..."
+
+    timestamp_start=$(date +%s)
+    
     python3 socker.py -i $PROXY_FILE -o $OutputFile -th $th -t $t
+    #go run socker.go $PROXY_FILE $OutputFile 1
+
+    # Calculate the time of checking proxies
+    elapsed_time=$(($(date +%s) - $timestamp_start))
+
+    if [[ $elapsed_time -gt 60 ]]; then
+        echo "Proxies checked in $((elapsed_time / 60))m $((elapsed_time % 60))s"
+
+    else
+        echo "Proxies checked in $elapsed_time seconds"
+    fi
 
     # Merge the new proxies into the proxies file
     echo "$(cat $OutputFile)" > $PROXY_FILE
     rm $OutputFile
 
 fi
+
 ###############################################################################
-##  PROXYCHAINS PART
+##  TERMINAL EMULATION PART
 ###############################################################################
 
+#home
+home=~
+
 # List of commands to exclude from proxychains
-EXCLUDE_COMMANDS=("cd" "ls" "pwd")
+#EXCLUDE_COMMANDS=("cd" "ls" "pwd")
 
 # Colors
 RED='\033[0;31m'
@@ -162,6 +188,15 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 RESET='\033[0m' 
 
+# Disable CTRL+C
+function ctrl_c() {
+    echo -e -n "\n${RED}write 'exit' to stop the program. ${RESET}\n"
+    return 0
+}
+
+trap "ctrl_c" SIGINT
+
+# Loop until user enters 'exit'
 while true; do
 
     # Set the prompt with colors
@@ -197,7 +232,7 @@ while true; do
 
     # End program if exit is entered
     if [[ $USER_COMMAND == "exit" ]]; then
-        echo "Bye."
+        echo -e "${GREEN}Bye.${RESET}"
         exit 0
     fi
 
@@ -215,6 +250,11 @@ while true; do
         fi
     done
 
+    if [[ -z "$USER_COMMAND" ]]; then
+        echo ""
+        continue
+    fi
+
     if $run_pc; then
         # Display selected proxies and the command
         echo "Using the following proxies:"
@@ -224,6 +264,10 @@ while true; do
         # Execute the command with proxychains using the temporary config
         proxychains -f "$TEMP_CONFIG" $USER_COMMAND
     else
+
+        if [[ "$USER_COMMAND" == "cd ~" ]]; then
+            USER_COMMAND="cd $home"
+        fi
         # Execute the command directly
         $USER_COMMAND
     fi
