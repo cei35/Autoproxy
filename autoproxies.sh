@@ -10,6 +10,17 @@ else
     exit 1
 fi
 
+# Check if jq and proxychains are installed
+if ! command -v jq &> /dev/null; then
+    echo "Error: jq is not installed."
+    exit 1
+fi
+
+if ! command -v proxychains &> /dev/null; then
+    echo "Error: proxychains is not installed."
+    exit 1
+fi
+
 ##saved_timestamp=$(grep '^last_commit=' "$config_file" | cut -d'=' -f2)
 
 #echo "Saved timestamp: $saved_timestamp"
