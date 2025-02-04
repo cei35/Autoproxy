@@ -27,6 +27,7 @@ fi
 
 # Define the proxies file
 PROXY_FILE=$(pwd)"/proxies_list.txt"
+touch "$PROXY_FILE" # In case it doesn't exist
 chmod 600 "$PROXY_FILE"
 
 ###############################################################################
